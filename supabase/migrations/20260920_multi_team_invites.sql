@@ -202,6 +202,7 @@ language plpgsql security definer set search_path = public as $$
 declare membership public.team_members;
 begin
   if auth.uid() is null or not exists (select 1 from public.teams where id = target_team_id) then raise exception 'Invalid team'; end if;
+  if not exists (select 1 from public.invites where team_id = target_team_id and expires_at > now()) then raise exception 'No valid invite exists for this team'; end if;
   if exists (select 1 from public.team_members where team_id = target_team_id and user_id = auth.uid()) then raise exception 'You are already a member of this team'; end if;
   insert into public.team_members (team_id, user_id, role) values (target_team_id, auth.uid(), 'member') returning * into membership;
   return membership;
@@ -209,3 +210,45 @@ end;
 $$;
 
 grant execute on function public.accept_team_invite(uuid) to authenticated;
+
+-- Update the signup trigger to stop referencing the dropped role column.
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.users (id, name, avatar_initials)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    upper(left(coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)), 2))
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute procedure public.handle_new_user();
+
+-- Updated health check covering the multi-team schema.
+create or replace function public.hacksync_healthcheck()
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'users_table', to_regclass('public.users') is not null,
+    'tasks_table', to_regclass('public.tasks') is not null,
+    'teams_table', to_regclass('public.teams') is not null,
+    'team_members_table', to_regclass('public.team_members') is not null,
+    'invites_table', to_regclass('public.invites') is not null,
+    'users_rls', coalesce((select relrowsecurity from pg_class where oid = to_regclass('public.users')), false),
+    'tasks_rls', coalesce((select relrowsecurity from pg_class where oid = to_regclass('public.tasks')), false),
+    'teams_rls', coalesce((select relrowsecurity from pg_class where oid = to_regclass('public.teams')), false),
+    'team_members_rls', coalesce((select relrowsecurity from pg_class where oid = to_regclass('public.team_members')), false),
+    'invites_rls', coalesce((select relrowsecurity from pg_class where oid = to_regclass('public.invites')), false)
+  );
+$$;
+
+grant execute on function public.hacksync_healthcheck() to anon, authenticated;

@@ -6,12 +6,14 @@ export async function runDevelopmentHealthCheck() {
 
   const { data, error } = await supabase.rpc('hacksync_healthcheck')
   if (error) {
-    console.warn('[HackSync] Supabase health check failed. Run supabase/schema.sql in the SQL editor.', error)
+    console.warn('[HackSync] Supabase health check failed. Run supabase/migrations/20260920_multi_team_invites.sql in the SQL editor.', error)
     return
   }
 
-  if (!data?.users_table || !data?.tasks_table || !data?.users_rls || !data?.tasks_rls || !data?.task_policies) {
-    console.warn('[HackSync] Supabase schema is incomplete. Expected users/tasks tables, RLS, and task policies.', data)
+  const required = ['users_table', 'tasks_table', 'teams_table', 'team_members_table', 'invites_table', 'users_rls', 'tasks_rls', 'teams_rls', 'team_members_rls', 'invites_rls'] as const
+  const missing = required.filter((key) => !data?.[key])
+  if (missing.length) {
+    console.warn('[HackSync] Supabase schema is incomplete. Missing:', missing, data)
     return
   }
 
