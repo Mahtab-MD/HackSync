@@ -19,7 +19,7 @@ node .\node_modules\vite\bin\vite.js --host 0.0.0.0
 
 1. Copy `.env.example` to `.env`.
 2. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-3. Run `supabase/schema.sql` in the Supabase SQL editor.
-4. Enable Google under Supabase Authentication providers and add `http://localhost:5173` to the redirect URLs.
+3. Run `supabase/schema.sql` in the Supabase SQL editor. For an existing installation, run `supabase/migrations/20260920_scope_tasks_to_authenticated_users.sql` instead.
+4. Add `http://localhost:5173` to the Supabase authentication URL configuration.
 
-Without Supabase credentials, the app runs in local preview mode with demo tasks.
+Without Supabase credentials, the app shows a connection-required state and never renders local task or teammate data.
