@@ -30,6 +30,20 @@ create policy "Users can create their own tasks" on public.tasks
 create policy "Users can update assigned tasks" on public.tasks
   for update to authenticated using (assignee_id = auth.uid()) with check (assignee_id = auth.uid());
 
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.users (id, name, avatar_initials, role)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    upper(left(coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)), 2)),
+    case when not exists (select 1 from public.users) then 'lead'::public.user_role else 'member'::public.user_role end
+  );
+  return new;
+end;
+$$;
+
 create or replace function public.hacksync_healthcheck()
 returns jsonb
 language sql
